@@ -1,7 +1,8 @@
 import "server-only";
 import mongoose from "mongoose";
 
-// Reuse one connection across hot reloads in development.
+// Reuse one connection across hot reloads in development and across requests
+// on the same server in production.
 const cached = globalThis._mongoose ?? (globalThis._mongoose = { conn: null, promise: null });
 
 export async function connectDB() {
@@ -12,7 +13,13 @@ export async function connectDB() {
     throw new Error("MONGODB_URI is not set. Add your MongoDB connection string to .env.local");
   }
 
-  cached.promise ??= mongoose.connect(uri, { bufferCommands: false });
+  cached.promise ??= mongoose.connect(uri, {
+    bufferCommands: false,
+    // Indexes are created while developing; checking them on every production
+    // start only adds slow extra trips to the database.
+    autoIndex: process.env.NODE_ENV !== "production",
+    serverSelectionTimeoutMS: 10000,
+  });
   try {
     cached.conn = await cached.promise;
   } catch (error) {

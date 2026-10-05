@@ -28,6 +28,7 @@ export async function assertMonthOpen(key) {
 }
 
 async function calculateLive(key) {
+  await connectDB();
   const [members, meals, expenses, deposits] = await Promise.all([
     Member.find().sort({ name: 1 }).lean(),
     MealEntry.find({ month: key }).lean(),
@@ -50,11 +51,12 @@ async function calculateLive(key) {
 
 // A closed month shows its frozen snapshot; an open month is calculated live.
 export async function getMonthReport(key) {
-  const month = await findMonth(key);
+  // Load the month and its data at the same time: one trip to the database instead of two.
+  const [month, live] = await Promise.all([findMonth(key), calculateLive(key)]);
   if (month?.status === "closed" && month.snapshot) {
     return { ...month.snapshot, month: key, status: "closed", closedAt: month.closedAt?.toISOString() ?? null };
   }
-  return { ...(await calculateLive(key)), month: key, status: "open", closedAt: null };
+  return { ...live, month: key, status: "open", closedAt: null };
 }
 
 export async function closeMonth(key) {
